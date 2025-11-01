@@ -38,25 +38,50 @@ class SimpleTestAgent(BaseA2AAgent):
             history=messages + [response_message]
         )
 
-# Initialize our test agent
-test_agent = SimpleTestAgent()
-
+# Initialize our test agent with test id error handling
 @app.post("/a2a/agent")
 async def a2a_endpoint(request: Request):
     """REUSABLE: A2A endpoint that works for any agent"""
     try:
         body = await request.json()
+        
+        # Get request ID early for error handling
+        request_id = body.get("id", "unknown")
+        
+        # Validate JSON-RPC 2.0 basics first
+        if body.get("jsonrpc") != "2.0" or not request_id:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32600,
+                        "message": "Invalid Request: jsonrpc must be '2.0' and id is required"
+                    }
+                }
+            )
+        
+        # Now parse with Pydantic
         rpc_request = JSONRPCRequest(**body)
         
         response = await test_agent.handle_a2a_request(rpc_request)
         return response.model_dump()
         
     except Exception as e:
+        # Extract request ID from body if available
+        request_id = "unknown"
+        try:
+            if 'body' in locals():
+                request_id = body.get("id", "unknown")
+        except:
+            pass
+            
         return JSONResponse(
             status_code=500,
             content={
                 "jsonrpc": "2.0",
-                "id": None,
+                "id": request_id,
                 "error": {
                     "code": -32603,
                     "message": "Internal error",
@@ -64,6 +89,36 @@ async def a2a_endpoint(request: Request):
                 }
             }
         )
+    
+    # OR This ORIGINAL SIMPLER VERSION:
+    # This is without id for error handling improvements
+    # try:
+    
+# test_agent = SimpleTestAgent()
+
+# @app.post("/a2a/agent")
+# async def a2a_endpoint(request: Request):
+#     """REUSABLE: A2A endpoint that works for any agent"""
+#     try:
+#         body = await request.json()
+#         rpc_request = JSONRPCRequest(**body)
+        
+#         response = await test_agent.handle_a2a_request(rpc_request)
+#         return response.model_dump()
+        
+#     except Exception as e:
+#         return JSONResponse(
+#             status_code=500,
+#             content={
+#                 "jsonrpc": "2.0",
+#                 "id": None,
+#                 "error": {
+#                     "code": -32603,
+#                     "message": "Internal error",
+#                     "data": {"details": str(e)}
+#                 }
+#             }
+#         )
 
 # Keep your existing endpoints (they're already reusable)
 @app.get("/")

@@ -1,9 +1,8 @@
 from pydantic import BaseModel, Field
-from typing import Literal, Optional, List, Dict, Any
+from typing import Literal, Optional, List, Dict, Any, Union
 from datetime import datetime
 from uuid import uuid4
 
-# These models work for ANY A2A agent
 class MessagePart(BaseModel):
     kind: Literal["text", "data", "file"]
     text: Optional[str] = None
@@ -16,6 +15,19 @@ class A2AMessage(BaseModel):
     parts: List[MessagePart]
     messageId: str = Field(default_factory=lambda: str(uuid4()))
     taskId: Optional[str] = None
+
+class MessageConfiguration(BaseModel):
+    blocking: bool = True
+
+class MessageParams(BaseModel):
+    message: A2AMessage
+    configuration: Optional[MessageConfiguration] = None
+    contextId: Optional[str] = None
+
+class ExecuteParams(BaseModel):
+    contextId: Optional[str] = None
+    taskId: Optional[str] = None
+    messages: List[A2AMessage]
 
 class TaskStatus(BaseModel):
     state: Literal["working", "completed", "input-required", "failed"]
@@ -38,8 +50,8 @@ class TaskResult(BaseModel):
 class JSONRPCRequest(BaseModel):
     jsonrpc: Literal["2.0"]
     id: str
-    method: Literal["message/send"]
-    params: Dict[str, Any]  # Flexible for different agent types
+    method: Literal["message/send", "execute"]
+    params: Union[MessageParams, ExecuteParams]  # Use Union for Python 3.10+
 
 class JSONRPCResponse(BaseModel):
     jsonrpc: Literal["2.0"] = "2.0"

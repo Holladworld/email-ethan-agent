@@ -105,7 +105,7 @@ async def agent_discovery():
     return {
         "name": "Email Ethan",
         "description": "AI-powered email management assistant that triages and summarizes your inbox",
-        "url": "http://localhost:8000",  # Using localhost for now
+        "url": "https://email-ethan-agent-production.up.railway.app", #"http://localhost:8000",  # Using localhost for now
         "version": "1.0.0",
         "provider": {
             "organization": "Holladworld",

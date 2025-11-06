@@ -14,7 +14,8 @@
       "position": [400, 200],
       "type": "a2a/mastra-a2a-node",
       "typeVersion": 1,
-      "url": "http://localhost:8000/a2a/agent" 
+      "url": "https://email-ethan-agent-production.up.railway.app/a2a/agent"
+
     }
   ],
   "pinData": {},

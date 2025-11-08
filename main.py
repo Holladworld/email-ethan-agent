@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
 from dotenv import load_dotenv
@@ -22,7 +23,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Simple authentication endpoints (we'll enhance these later)
+# Add CORS middleware to handle requests from Telex
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins - you can restrict this later
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+# Simple authentication endpoints
 @app.get("/auth/gmail")
 async def start_gmail_auth():
     """Start Gmail OAuth flow - simple version"""
@@ -60,7 +70,7 @@ async def auth_status():
         return {
             "authenticated": False,
             "message": "🔗 Ready to connect your Gmail",
-            "auth_url": "http://localhost:8000/auth/gmail", 
+            "auth_url": "https://email-ethan-agent-production.up.railway.app/auth/gmail",  # Updated to production URL
             "gmail_configured": True,
             "demo_mode": True,
             "note": "Currently using demo data. Connect Gmail for real emails."
@@ -77,15 +87,37 @@ async def auth_status():
 
 @app.post("/a2a/agent")
 async def a2a_endpoint(request: Request):
-    """A2A endpoint now powered by Email Ethan"""
+    """A2A endpoint with enhanced error handling and logging"""
     try:
+        # Parse the request body
         body = await request.json()
+        print(f"📨 Received A2A request: {body}")
+        
+        # Validate JSON-RPC 2.0 request
+        if body.get("jsonrpc") != "2.0" or "id" not in body:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "jsonrpc": "2.0",
+                    "id": body.get("id"),
+                    "error": {
+                        "code": -32600,
+                        "message": "Invalid Request: jsonrpc must be '2.0' and id is required"
+                    }
+                }
+            )
+        
+        # Create the request object
         rpc_request = JSONRPCRequest(**body)
         
+        # Process with Email Ethan
         response = await email_ethan.handle_a2a_request(rpc_request)
+        
+        print(f"📤 Sending A2A response: {response}")
         return response.model_dump()
         
     except Exception as e:
+        print(f"❌ A2A endpoint error: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={
@@ -105,7 +137,7 @@ async def agent_discovery():
     return {
         "name": "Email Ethan",
         "description": "AI-powered email management assistant that triages and summarizes your inbox",
-        "url": "https://email-ethan-agent-production.up.railway.app", #"http://localhost:8000",  # Using localhost for now
+        "url": "https://email-ethan-agent-production.up.railway.app",  # Production URL
         "version": "1.0.0",
         "provider": {
             "organization": "Holladworld",
@@ -138,11 +170,47 @@ async def agent_discovery():
 # Keep existing health endpoints
 @app.get("/")
 async def root():
-    return {"message": "Email Ethan API is running!", "status": "healthy"}
+    return {
+        "message": "Email Ethan API is running!", 
+        "status": "healthy",
+        "version": "1.0.0",
+        "endpoints": {
+            "health": "/health",
+            "a2a_agent": "/a2a/agent", 
+            "agent_discovery": "/.well-known/agent.json",
+            "auth_status": "/auth/status"
+        }
+    }
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "agent": "email-ethan"}
+    return {
+        "status": "healthy", 
+        "agent": "email-ethan",
+        "timestamp": "2024-01-15T10:00:00Z",  # You can make this dynamic later
+        "version": "1.0.0"
+    }
+
+# Add a simple test endpoint
+@app.get("/test")
+async def test_endpoint():
+    """Simple test endpoint to verify the API is working"""
+    return {
+        "message": "Email Ethan API is working!",
+        "status": "success",
+        "test_commands": [
+            "Check my emails",
+            "Summarize my inbox", 
+            "What can you do?",
+            "Categorize my emails"
+        ]
+    }
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=True)
+    uvicorn.run(
+        "main:app", 
+        host="0.0.0.0", 
+        port=PORT, 
+        reload=True,
+        access_log=True  # Enable access logs for debugging
+    )

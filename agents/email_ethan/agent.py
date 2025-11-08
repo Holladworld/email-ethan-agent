@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Any
 from uuid import uuid4
+from datetime import datetime  # ADD THIS IMPORT
 
 from core.a2a_base import BaseA2AAgent
 from models.a2a import TaskResult, TaskStatus, A2AMessage, MessagePart, Artifact
@@ -12,60 +13,89 @@ class EmailEthanAgent(BaseA2AAgent):
         self.email_sessions = {}  # Track email conversations
     
     async def process_message(self, user_text: str, messages: list, context_id: Optional[str], task_id: Optional[str]) -> TaskResult:
-        """Process email-related requests - Email Ethan's specific logic"""
-        context_id = context_id or str(uuid4())
-        task_id = task_id or str(uuid4())
+        """Process email-related requests with better error handling"""
+        try:
+            context_id = context_id or str(uuid4())
+            task_id = task_id or str(uuid4())
 
-        print(f"🔍 DEBUG: Received message: '{user_text}'")
-        
-        # Enhanced command detection for Telex
-        user_text_lower = user_text.lower().strip()
-        
-        # More flexible command matching
-        if any(cmd in user_text_lower for cmd in ['email', 'inbox', 'unread', 'message', 'read my', 'check my']):
-            if any(cmd in user_text_lower for cmd in ['check', 'show', 'get', 'what', 'read my']):
-                result = await self._handle_check_emails(user_text)
-            elif any(cmd in user_text_lower for cmd in ['summar', 'brief', 'overview']):
-                result = await self._handle_summarize_emails(user_text)
-            elif any(cmd in user_text_lower for cmd in ['categor', 'priorit', 'organiz']):
-                result = await self._handle_categorize_emails(user_text)
+            print(f"🔍 DEBUG: Received message: '{user_text}'")
+            
+            # Enhanced command detection
+            user_text_lower = user_text.lower().strip()
+            
+            # Determine what the user wants
+            if any(cmd in user_text_lower for cmd in ['email', 'inbox', 'unread', 'message', 'read my', 'check my']):
+                if any(cmd in user_text_lower for cmd in ['check', 'show', 'get', 'what', 'read my']):
+                    result = await self._handle_check_emails(user_text)
+                elif any(cmd in user_text_lower for cmd in ['summar', 'brief', 'overview']):
+                    result = await self._handle_summarize_emails(user_text)
+                elif any(cmd in user_text_lower for cmd in ['categor', 'priorit', 'organiz']):
+                    result = await self._handle_categorize_emails(user_text)
+                else:
+                    result = await self._handle_check_emails(user_text)  # Default to check
             else:
-                # If they mentioned email but weren't specific
-                result = await self._handle_check_emails(user_text)
-        else:
-            result = await self._handle_general_inquiry(user_text)
-        
-        # Build A2A response
-        response_message = A2AMessage(
-            role="agent",
-            parts=[MessagePart(kind="text", text=result["response"])],
-            taskId=task_id
-        )
-        
-        # Build artifacts with email data
-        artifacts = []
-        if "email_data" in result:
-            artifacts.append(Artifact(
-                name="emailAnalysis",
-                parts=[MessagePart(kind="data", data={"emails": result["email_data"]})]
-            ))
-
-        if "categorized_emails" in result:
-            artifacts.append(Artifact(
-                name="categorizedEmails", 
-                parts=[MessagePart(kind="data", data={"categorized": result["categorized_emails"]})]
-            ))
-        
-        return TaskResult(
-            id=task_id,
-            contextId=context_id,
-            status=TaskStatus(
-                state="completed",
-                message=response_message
-            ),
-            artifacts=artifacts,
-            history=messages + [response_message]
-        )
+                result = await self._handle_general_inquiry(user_text)
+            
+            # Build A2A response - ENSURING PROPER STRUCTURE
+            response_message = A2AMessage(
+                kind="message",
+                role="agent",
+                parts=[MessagePart(kind="text", text=result["response"])],
+                messageId=str(uuid4()),
+                taskId=task_id
+            )
+            
+            # Build artifacts
+            artifacts = []
+            if "email_data" in result:
+                artifacts.append(Artifact(
+                    artifactId=str(uuid4()),
+                    name="emailAnalysis",
+                    parts=[MessagePart(kind="data", data={"emails": result["email_data"]})]
+                ))
+            
+            # Build history
+            history = []
+            if messages:
+                history.extend(messages)
+            history.append(response_message)
+            
+            return TaskResult(
+                id=task_id,
+                contextId=context_id,
+                status=TaskStatus(
+                    state="completed",
+                    timestamp=datetime.utcnow().isoformat() + "Z",  # Ensure proper timestamp
+                    message=response_message
+                ),
+                artifacts=artifacts,
+                history=history,
+                kind="task"
+            )
+            
+        except Exception as e:
+            print(f"❌ ERROR in process_message: {str(e)}")
+            # Return proper error response
+            error_message = A2AMessage(
+                kind="message",
+                role="agent", 
+                parts=[MessagePart(kind="text", text="Sorry, I encountered an error processing your request. Please try again.")],
+                messageId=str(uuid4()),
+                taskId=task_id or str(uuid4())
+            )
+            
+            return TaskResult(
+                id=task_id or str(uuid4()),
+                contextId=context_id or str(uuid4()),
+                status=TaskStatus(
+                    state="failed",
+                    timestamp=datetime.utcnow().isoformat() + "Z",
+                    message=error_message
+                ),
+                artifacts=[],
+                history=[],
+                kind="task"
+            )
     
     async def _handle_check_emails(self, user_text: str) -> Dict[str, Any]:
         """Handle email checking request"""
